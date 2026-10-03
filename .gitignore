@@ -1,0 +1,12 @@
+# secrets
+.env
+
+# runtime data and logs (generated on the server)
+data/
+logs/
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
