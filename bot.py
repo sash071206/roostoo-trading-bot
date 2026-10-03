@@ -12,7 +12,7 @@ from data_store import BarStore
 from paper_client import PaperClient
 from roostoo_client import RoostooClient, RoostooError
 from strategy import min_bars_needed
-from trader import Trader
+from trader import Trader, spot_wallet
 
 
 def setup_logging() -> None:
@@ -59,8 +59,11 @@ def main() -> None:
     if not bal.get("Success"):
         log.error("Balance check failed: %s -- check API keys / permissions", bal.get("ErrMsg"))
         sys.exit(1)
+    wallet = spot_wallet(bal)
     log.info("Authenticated. Wallet: %s",
-             {k: v for k, v in bal.get("Wallet", {}).items() if (v.get("Free") or v.get("Lock"))})
+             {k: v for k, v in wallet.items() if (v.get("Free") or v.get("Lock"))})
+    if not wallet:
+        log.warning("Balance response has no wallet entries: %s", bal)
 
     first = client.ticker()
     if first.get("Success"):

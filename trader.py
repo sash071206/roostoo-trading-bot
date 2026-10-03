@@ -15,6 +15,11 @@ from strategy import Signal, compute_signal, stop_pct, target_weights
 log = logging.getLogger(__name__)
 
 
+def spot_wallet(bal: dict) -> dict:
+    """The live API returns balances under 'SpotWallet'; the docs show 'Wallet'. Accept both."""
+    return bal.get("SpotWallet") or bal.get("Wallet") or {}
+
+
 def floor_to(x: float, decimals: int) -> float:
     """Round down to the exchange's amount step. Never rounds up, so a sell can't exceed holdings."""
     f = 10 ** decimals
@@ -64,7 +69,7 @@ class Trader:
         bal = self.client.balance()
         if not bal.get("Success"):
             raise RoostooError(f"balance failed: {bal.get('ErrMsg')}")
-        wallet = bal.get("Wallet", {})
+        wallet = spot_wallet(bal)
         usd = wallet.get("USD", {})
         usd_free = float(usd.get("Free", 0) or 0)
         equity = usd_free + float(usd.get("Lock", 0) or 0)
@@ -87,6 +92,9 @@ class Trader:
     def rebalance(self, tickers: Dict[str, dict], now: float) -> None:
         cfg, st = self.cfg, self.state
         usd_free, holdings, equity = self.portfolio(tickers)
+        if equity <= 0:
+            log.error("Equity is 0 -- wallet empty or balance format unexpected; skipping rebalance")
+            return
 
         # Drawdown circuit breaker
         if st["breaker_until"] and now >= st["breaker_until"]:
@@ -235,7 +243,7 @@ class Trader:
     def _free_qty(self, pair: str) -> float:
         coin = pair.split("/")[0]
         bal = self.client.balance()
-        return float(bal.get("Wallet", {}).get(coin, {}).get("Free", 0) or 0)
+        return float(spot_wallet(bal).get(coin, {}).get("Free", 0) or 0)
 
     # ---------- logs ----------
     def _append_csv(self, path: str, header: list, row: list) -> None:
