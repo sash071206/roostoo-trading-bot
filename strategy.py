@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from statistics import pstdev
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 
 @dataclass
@@ -47,8 +47,10 @@ def compute_signal(pair: str, closes: List[float], cfg, held: bool) -> Optional[
     score = mom / (vol * math.sqrt(cfg.MOM_LOOKBACK))
 
     if held:
-        # Looser condition to stay in a position than to enter one (hysteresis cuts churn).
-        eligible = price > es
+        # Looser condition to stay in a position than to enter one (hysteresis cuts churn):
+        # stay while the 6h EMA is above the 24h EMA, i.e. exit on a trend reversal, not on
+        # every price dip below the 24h EMA. The trailing stop handles sharp drops.
+        eligible = ef > es
         score += cfg.HOLD_BONUS
     else:
         eligible = price > es and ef > es and mom > 0
@@ -63,13 +65,25 @@ def stop_pct(sig: Optional[Signal], cfg) -> float:
     return min(cfg.STOP_MAX, max(cfg.STOP_MIN, cfg.STOP_VOL_MULT * daily_vol))
 
 
-def target_weights(signals: Dict[str, Signal], regime: Optional[Signal], cfg) -> Dict[str, float]:
-    """Pick the top-scoring eligible coins and size them by inverse volatility."""
-    risk_on = regime is not None and regime.price > regime.ema_slow
-    gross = cfg.MAX_GROSS_EXPOSURE if risk_on else cfg.RISK_OFF_EXPOSURE
+def is_risk_on(regime: Optional[Signal]) -> bool:
+    """BTC regime: risk-on while BTC's 6h EMA is above its 24h EMA (smoother than price vs EMA,
+    so exposure does not flip between 90% and 30% on every small wobble)."""
+    return regime is not None and regime.ema_fast > regime.ema_slow
 
-    chosen = sorted((s for s in signals.values() if s.eligible), key=lambda s: s.score, reverse=True)
-    chosen = chosen[: cfg.MAX_POSITIONS]
+
+def target_weights(signals: Dict[str, Signal], regime: Optional[Signal], cfg,
+                   locked: Iterable[str] = ()) -> Dict[str, float]:
+    """Pick the top-scoring eligible coins and size them by inverse volatility.
+
+    `locked` pairs (recently entered, trend still intact) keep their slot ahead of new
+    candidates, so the bot does not pay round-trip fees to swap between similar coins.
+    """
+    gross = cfg.MAX_GROSS_EXPOSURE if is_risk_on(regime) else cfg.RISK_OFF_EXPOSURE
+
+    eligible = sorted((s for s in signals.values() if s.eligible), key=lambda s: s.score, reverse=True)
+    locked = set(locked)
+    chosen = [s for s in eligible if s.pair in locked][: cfg.MAX_POSITIONS]
+    chosen += [s for s in eligible if s.pair not in locked][: cfg.MAX_POSITIONS - len(chosen)]
     if not chosen:
         return {}
     inv = {s.pair: 1.0 / s.vol for s in chosen}

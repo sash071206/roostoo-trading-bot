@@ -29,14 +29,17 @@ FAST_EMA = 24                # 6h
 SLOW_EMA = 96                # 24h
 MOM_LOOKBACK = 96            # 24h momentum
 VOL_LOOKBACK = 96            # 24h realised volatility
-HOLD_BONUS = 0.25            # score bonus for coins already held (reduces churn/fees)
+HOLD_BONUS = 1.0             # score bonus for coins already held (reduces churn/fees)
+MIN_HOLD_HOURS = 12          # keep a new position at least this long while its trend holds
+                             # (trailing stop and drawdown breaker still apply immediately)
 
 # --- Portfolio construction ---
 MAX_POSITIONS = 3
 MAX_GROSS_EXPOSURE = 0.90    # max fraction of equity invested when BTC regime is risk-on
 RISK_OFF_EXPOSURE = 0.30     # max fraction invested when BTC is below its slow EMA
 MAX_WEIGHT_PER_COIN = 0.35
-MIN_TRADE_FRACTION = 0.02    # ignore rebalances smaller than 2% of equity (fee control)
+MIN_TRADE_FRACTION = 0.05    # ignore rebalances smaller than 5% of equity (fee control)
+HELD_DRIFT_TOLERANCE = 0.10  # only resize a held coin if its weight is >10% of equity off target
 DUST_USD = 5.0               # holdings worth less than this are ignored
 
 # --- Risk management ---

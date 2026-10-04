@@ -20,14 +20,17 @@ value), plus BTC/USD.
 | Trend filter | price > 24h EMA **and** 6h EMA > 24h EMA |
 | Momentum | 24h return > 0 |
 | Score | 24h return ÷ (24h volatility × √96), a risk-adjusted momentum t-stat |
-| Hysteresis | a coin already held only needs price > 24h EMA to stay, and gets a +0.25 score bonus. This cuts churn and fees. |
+| Hysteresis | a coin already held stays while its 6h EMA is above its 24h EMA (exit on trend reversal, not on every dip), and gets a +1.0 score bonus. |
 
 **Portfolio construction.**
 - Hold up to 3 coins: the top-scoring eligible ones.
 - Size by inverse volatility (calmer coins get more capital), capped at 35% per coin.
-- **BTC regime filter:** if BTC is above its 24h EMA, up to 90% of equity is invested;
-  otherwise at most 30%.
-- Rebalances smaller than 2% of equity are skipped to save the 0.1% taker fee.
+- **BTC regime filter:** while BTC's 6h EMA is above its 24h EMA, up to 90% of equity is
+  invested; otherwise at most 30%.
+- **Minimum holding period:** a new position keeps its slot for at least 12 hours while its
+  trend holds, so the bot does not swap between similar coins every hour.
+- **Fee control:** new positions under 5% of equity are skipped, and held positions are only
+  resized when they drift more than 10% of equity from target.
 
 **Risk management.**
 - **Trailing stop** per position: 1.5 × daily volatility below the post-entry peak,
@@ -101,3 +104,8 @@ bars itself (logged as "Warming up").
 ## Changelog
 
 - v1.0: initial trend-following strategy with regime filter, trailing stops and drawdown breaker.
+- v1.1: fixed balance parsing (live API returns `SpotWallet`, not `Wallet` as in the docs).
+- v1.2: turnover reduction after the first live day showed ~3.7x daily turnover. Hold rule and
+  BTC regime now use the 6h/24h EMA cross instead of price vs 24h EMA; 12h minimum hold;
+  hold bonus 0.25 -> 1.0; held-position drift band 10%; min trade 2% -> 5%. In simulation this
+  cut trades by ~75% and fees by ~60%.

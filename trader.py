@@ -6,11 +6,12 @@ import json
 import logging
 import math
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
 
 from roostoo_client import RoostooError
-from strategy import Signal, compute_signal, stop_pct, target_weights
+from strategy import Signal, compute_signal, is_risk_on, stop_pct, target_weights
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class Trader:
     # ---------- state ----------
     def _load_state(self) -> dict:
         default = {"peak_equity": 0.0, "breaker_until": 0.0, "entry_peaks": {},
-                   "cooldown_until": {}, "last_fill_day": ""}
+                   "entry_time": {}, "cooldown_until": {}, "last_fill_day": ""}
         if os.path.exists(self.cfg.STATE_FILE):
             with open(self.cfg.STATE_FILE) as f:
                 default.update(json.load(f))
@@ -91,6 +92,7 @@ class Trader:
     # ---------- main decision step ----------
     def rebalance(self, tickers: Dict[str, dict], now: float) -> None:
         cfg, st = self.cfg, self.state
+        self._now = now
         usd_free, holdings, equity = self.portfolio(tickers)
         if equity <= 0:
             log.error("Equity is 0 -- wallet empty or balance format unexpected; skipping rebalance")
@@ -135,6 +137,15 @@ class Trader:
                 st["cooldown_until"][pair] = now + cfg.STOP_COOLDOWN_HOURS * 3600
                 log.info("Trailing stop %s: price %.6g <= peak %.6g x (1-%.1f%%)", pair, px, peak, sp * 100)
 
+        # Minimum holding period: young positions whose trend is intact keep their slot
+        locked = set()
+        for pair in holdings:
+            entered = float(st["entry_time"].setdefault(pair, now))
+            sig = signals.get(pair)
+            if (now - entered < cfg.MIN_HOLD_HOURS * 3600 and pair not in stopped
+                    and sig is not None and sig.eligible):
+                locked.add(pair)
+
         # Targets
         if breaker:
             targets: Dict[str, float] = {}
@@ -142,8 +153,8 @@ class Trader:
             usable = {p: s for p, s in signals.items()
                       if p in self.pair_info and p not in stopped
                       and now >= float(st["cooldown_until"].get(p, 0))}
-            targets = target_weights(usable, regime, cfg)
-        risk_on = regime.price > regime.ema_slow
+            targets = target_weights(usable, regime, cfg, locked=locked)
+        risk_on = is_risk_on(regime)
         log.info("Equity %.2f | DD %.2f%% | BTC regime %s | targets %s",
                  equity, drawdown * 100, "ON" if risk_on else "OFF",
                  {p: round(w, 3) for p, w in targets.items()} or "cash")
@@ -153,12 +164,15 @@ class Trader:
         sells, buys = [], []
         for pair in set(current_w) | set(targets):
             tw, cw = targets.get(pair, 0.0), current_w.get(pair, 0.0)
+            # Held coins are only resized when far from target (fee control); new ones use the
+            # smaller threshold.
+            band = cfg.HELD_DRIFT_TOLERANCE if (pair in holdings and tw > 0) else cfg.MIN_TRADE_FRACTION
             if tw == 0.0 and pair in holdings:
                 reason = "stop" if pair in stopped else ("breaker" if breaker else "exit")
                 sells.append((pair, None, holdings[pair][1], reason))
-            elif tw - cw <= -cfg.MIN_TRADE_FRACTION:
+            elif tw - cw <= -band:
                 sells.append((pair, (cw - tw) * equity, None, "trim"))
-            elif tw - cw >= cfg.MIN_TRADE_FRACTION:
+            elif tw - cw >= band:
                 buys.append((pair, (tw - cw) * equity, "entry" if pair not in holdings else "add"))
 
         for pair, notional, qty, reason in sells:
@@ -230,12 +244,14 @@ class Trader:
                         d.get("Status", ""), res.get("ErrMsg", ""))
         if ok:
             log.info("%s %s %s @ %.6g (%s)", side, qty_str, pair, float(fill_px), reason)
-            day, _ = self._local_day(datetime.now(timezone.utc).timestamp())
+            day, _ = self._local_day(getattr(self, "_now", None) or time.time())
             self.state["last_fill_day"] = day
             if side == "BUY":
                 self.state["entry_peaks"].setdefault(pair, float(fill_px))
+                self.state["entry_time"].setdefault(pair, getattr(self, "_now", None) or time.time())
             elif full_exit:
                 self.state["entry_peaks"].pop(pair, None)
+                self.state["entry_time"].pop(pair, None)
         else:
             log.error("Order failed %s %s %s: %s", side, qty_str, pair, res.get("ErrMsg"))
         return ok
