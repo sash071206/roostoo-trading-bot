@@ -24,9 +24,9 @@ value), plus BTC/USD.
 
 **Portfolio construction.**
 - Hold up to 3 coins: the top-scoring eligible ones.
-- Size by inverse volatility (calmer coins get more capital), capped at 35% per coin.
-- **BTC regime filter:** while BTC's 6h EMA is above its 24h EMA, up to 90% of equity is
-  invested; otherwise at most 30%.
+- Size by inverse volatility (calmer coins get more capital), capped at 25% per coin.
+- **BTC regime filter:** while BTC's 6h EMA is above its 24h EMA, up to 50% of equity is
+  invested; otherwise the bot holds cash.
 - **Minimum holding period:** a new position keeps its slot for at least 12 hours while its
   trend holds, so the bot does not swap between similar coins every hour.
 - **Fee control:** new positions under 5% of equity are skipped, and held positions are only
@@ -109,3 +109,7 @@ bars itself (logged as "Warming up").
   BTC regime now use the 6h/24h EMA cross instead of price vs 24h EMA; 12h minimum hold;
   hold bonus 0.25 -> 1.0; held-position drift band 10%; min trade 2% -> 5%. In simulation this
   cut trades by ~75% and fees by ~60%.
+- v1.3: defensive mode for the second half of the competition. After 6 days in a choppy,
+  falling market (most teams negative), max exposure 90% -> 50%, risk-off exposure 30% -> 0%
+  (cash when BTC's trend is down), per-coin cap 35% -> 25%. Aim: protect return rank and
+  improve drawdown-based risk metrics (Calmar/Sortino).

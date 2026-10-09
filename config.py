@@ -35,9 +35,9 @@ MIN_HOLD_HOURS = 12          # keep a new position at least this long while its 
 
 # --- Portfolio construction ---
 MAX_POSITIONS = 3
-MAX_GROSS_EXPOSURE = 0.90    # max fraction of equity invested when BTC regime is risk-on
-RISK_OFF_EXPOSURE = 0.30     # max fraction invested when BTC is below its slow EMA
-MAX_WEIGHT_PER_COIN = 0.35
+MAX_GROSS_EXPOSURE = 0.50    # max fraction of equity invested when BTC regime is risk-on
+RISK_OFF_EXPOSURE = 0.0      # fully in cash when BTC's trend is down
+MAX_WEIGHT_PER_COIN = 0.25
 MIN_TRADE_FRACTION = 0.05    # ignore rebalances smaller than 5% of equity (fee control)
 HELD_DRIFT_TOLERANCE = 0.10  # only resize a held coin if its weight is >10% of equity off target
 DUST_USD = 5.0               # holdings worth less than this are ignored

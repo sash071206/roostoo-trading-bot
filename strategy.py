@@ -79,6 +79,8 @@ def target_weights(signals: Dict[str, Signal], regime: Optional[Signal], cfg,
     candidates, so the bot does not pay round-trip fees to swap between similar coins.
     """
     gross = cfg.MAX_GROSS_EXPOSURE if is_risk_on(regime) else cfg.RISK_OFF_EXPOSURE
+    if gross <= 0:
+        return {}
 
     eligible = sorted((s for s in signals.values() if s.eligible), key=lambda s: s.score, reverse=True)
     locked = set(locked)
